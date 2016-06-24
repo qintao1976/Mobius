@@ -122,5 +122,10 @@ namespace AdapterTest.Mocks
         {
             throw new NotImplementedException();
         }
+
+        public void RegisterSinkDStream(IDStreamProxy dstreamProxy, int partitionCount, int extraRetainNumber, byte[] command)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

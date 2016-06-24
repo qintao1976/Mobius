@@ -8,10 +8,12 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Microsoft.Spark.CSharp.Core;
+using System.Runtime.Serialization.Formatters.Binary;
 
+using Microsoft.Spark.CSharp.Core;
 using Microsoft.Spark.CSharp.Streaming;
 using Microsoft.Spark.CSharp.Samples;
+using Microsoft.Spark.CSharp.Interop.Ipc;
 
 using NUnit.Framework;
 
@@ -214,6 +216,60 @@ namespace Microsoft.Spark.CSharp
             ssc.Start();
             ssc.AwaitTermination();
         }
+
+        [Sample("experimental")]
+        internal static void SinkProcessorSample()
+        {
+            var sc = SparkCLRSamples.SparkContext;
+            var ssc = new StreamingContext(sc, 2);
+
+            string directory = SparkCLRSamples.Configuration.SampleDataLocation;
+            string checkpointPath = Path.Combine(directory, "checkpoint");
+            ssc.Checkpoint(checkpointPath);
+
+            const int partitions = 2;
+
+            // create the RDD
+            var seedRDD = sc.Parallelize(Enumerable.Range(0, 100), 2);
+            var dstream = new ConstantInputDStream<int>(seedRDD, ssc);
+            ssc.RegisterSinkDStream(dstream, partitions, 5, new SinkProcessorHelper().Execute);
+            ssc.Start();
+            ssc.AwaitTermination();
+        }
+
+        [Sample("experimental")]
+        internal static void DStreamSinkProcessorSample()
+        {
+            count = 0;
+
+            string directory = SparkCLRSamples.Configuration.SampleDataLocation;
+            string checkpointPath = Path.Combine(directory, "checkpoint");
+            int numPartitions = 2;
+
+            SparkContext sc = SparkCLRSamples.SparkContext;
+
+            StreamingContext ssc = StreamingContext.GetOrCreate(checkpointPath,
+                () =>
+                {
+
+                    StreamingContext context = new StreamingContext(sc, 2);
+                    context.Checkpoint(checkpointPath);
+
+                    var lines = context.TextFileStream(Path.Combine(directory, "test"));
+                    var words = lines.FlatMap(l => l.Split(' '));
+                    var pairs = words.Map(w => new KeyValuePair<string, int>(w, 1));
+                    var groups = pairs.GroupByKey(numPartitions);
+                    context.RegisterSinkDStream(groups, numPartitions, 5, new SinkProcessorHelper().Execute);
+                    return context;
+                });
+
+            StartFileServer(ssc, directory, "words.txt", int.MaxValue);
+
+            ssc.Start();
+
+            ssc.AwaitTermination();
+        }
+    
     }
 
 
@@ -233,6 +289,49 @@ namespace Microsoft.Spark.CSharp
             int result = vs.Sum(x => x.Item1 + x.Item2) + s + b.Value;
             return result;
         }
+    }
+
+    [Serializable]
+    internal class SinkProcessorHelper
+    {
+        internal IEnumerable<int> Execute(int partitionIndex, int previousAckedRddId, IEnumerable<KeyValuePair<int, byte[]>> input)
+        {
+            Console.WriteLine("SinkProcessorHelper, partitionIndex: {0}, previousAckedRddId: {1}", partitionIndex, previousAckedRddId);
+            BinaryFormatter formatter = new BinaryFormatter();
+
+            foreach (var kvp in input)
+            {
+                int flag = kvp.Key;
+                int rddId = -1;
+                switch (flag)
+                {
+                    case SinkDStreamProcessor.RDD_BEGIN:
+                        rddId = SerDe.ToInt(kvp.Value);
+                        Console.WriteLine("SinkProcessorHelper, receive RDD_BEGIN, rddId: {0}", rddId);
+                        break;
+
+                    case SinkDStreamProcessor.RDD_ELEMENT:
+                        Console.WriteLine("SinkProcessorHelper, receive RDD_ELEMENT");
+                        var ms = new MemoryStream(kvp.Value);
+                        var obj = formatter.Deserialize(ms);
+                        KeyValuePair<string, List<int>> pair = (KeyValuePair<string, List<int>>)obj;
+                        Console.WriteLine("SinkProcessorHelper, key: {0}, value: [{1}]",
+                            pair.Key, string.Join(",", pair.Value.ToArray()));
+                        break;
+
+                    case SinkDStreamProcessor.RDD_END:
+                        rddId = SerDe.ToInt(kvp.Value);
+                        Console.WriteLine("SinkProcessorHelper, receive RDD_END, rddId: {0}", rddId);
+                        yield return rddId;  // ack the processed RDD
+                        break;
+
+                    default:
+                        Console.WriteLine("unexpected flag: {0}");
+                        break;
+                }
+            }
+        }
+
     }
 
 }

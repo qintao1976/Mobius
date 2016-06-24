@@ -33,5 +33,6 @@ namespace Microsoft.Spark.CSharp.Proxy
         IDStreamProxy CreateConstantInputDStream(IRDDProxy rddProxy);
         IDStreamProxy EventHubsUnionStream(Dictionary<string, string> eventHubsParams, StorageLevelType storageLevelType);
 
+        void RegisterSinkDStream(IDStreamProxy dstreamProxy, int numPartitions, int ackedRddRetainNum, byte[] command);
     }
 }

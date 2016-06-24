@@ -15,6 +15,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using Microsoft.Spark.CSharp.Core;
+using Microsoft.Spark.CSharp.Interop;
 using Microsoft.Spark.CSharp.Interop.Ipc;
 using Microsoft.Spark.CSharp.Services;
 
@@ -386,6 +387,31 @@ namespace Microsoft.Spark.CSharp.Proxy.Ipc
             SparkCLRIpcProxy.JvmBridge.CallStaticJavaMethod("SparkCLRHandler", "connectCallback", port); //className and methodName hardcoded in CSharpBackendHandler
 
             return port;
+        }
+
+        public void RegisterSinkDStream(IDStreamProxy dstreamProxy, int numPartitions, int ackedRddRetainNum, byte[] command)
+        {
+            var hashMapReference = SparkCLRIpcProxy.JvmBridge.CallConstructor("java.util.HashMap", new object[] { });
+            var arrayListReference = SparkCLRIpcProxy.JvmBridge.CallConstructor("java.util.ArrayList", new object[] { });
+            var jvmBroadcastReferences = (sparkContextProxy as SparkContextIpcProxy).jvmBroadcastReferences;
+            var jbroadcastVariables = JvmBridgeUtils.GetJavaList<JvmObjectReference>(jvmBroadcastReferences);
+
+            SparkCLRIpcProxy.JvmBridge.CallStaticJavaMethod(
+                "org.apache.spark.streaming.api.csharp.CSharpDStream",
+                "registerSinkDStream",
+                new object[]
+                {
+                    jvmStreamingContextReference,
+                    (dstreamProxy as DStreamIpcProxy).jvmDStreamReference,
+                    numPartitions,
+                    ackedRddRetainNum,
+                    command,
+                    hashMapReference,
+                    arrayListReference,  
+                    SparkCLREnvironment.ConfigurationService.GetCSharpWorkerExePath(),
+                    "1.0",
+                    jbroadcastVariables
+                });
         }
     }
 }

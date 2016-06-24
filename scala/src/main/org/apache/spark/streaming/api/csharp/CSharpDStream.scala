@@ -5,16 +5,15 @@
 
 package org.apache.spark.streaming.api.csharp
 
-import org.apache.spark.api.csharp._
-import org.apache.spark.api.csharp.SerDe._
+import scala.collection.JavaConversions._
+import scala.language.existentials
+
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.Socket
-import java.util.{ArrayList => JArrayList}
+import java.util.{ArrayList => JArrayList, HashMap => JHashMap}
 import java.util.concurrent.ThreadPoolExecutor
 
-import scala.collection.JavaConversions._
-import scala.language.existentials
 import org.apache.spark.api.java._
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
@@ -22,8 +21,10 @@ import org.apache.spark.util.ThreadUtils
 import org.apache.spark.streaming.{Duration, Interval, StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.api.java._
-
-import scala.language.existentials
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.api.python.PythonBroadcast
+import org.apache.spark.api.csharp._
+import org.apache.spark.api.csharp.SerDe._
 
 object CSharpDStream {
 
@@ -88,6 +89,22 @@ object CSharpDStream {
     val queue = new java.util.LinkedList[JavaRDD[Array[Byte]]]
     rdds.forall(queue.add(_))
     queue
+  }
+
+  def registerSinkDStream()(
+      ssc: StreamingContext,
+      dstream: DStream[_],
+      partitionCount: Int,
+      extraRetainNumber: Int,
+      command: Array[Byte],
+      envVars: JHashMap[String, String],
+      cSharpIncludes: JArrayList[String],
+      cSharpWorkerExecutable: String,
+      unUsedVersionIdentifier: String,
+      broadcastVars: JArrayList[Broadcast[PythonBroadcast]]) = {
+    new CSharpSinkDStream(ssc, dstream, partitionCount, extraRetainNumber,
+      command, envVars, cSharpIncludes, cSharpWorkerExecutable,
+      unUsedVersionIdentifier, broadcastVars).register()
   }
 }
 
