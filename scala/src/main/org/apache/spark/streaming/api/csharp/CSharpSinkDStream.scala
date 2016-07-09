@@ -89,7 +89,7 @@ private [csharp] class CSharpSinkDStream[T: ClassTag](
   private val CheckPointFile = "CSharpSinkDStreamSnapshot.data"
   private val CheckPointBackupFile = "CSharpSinkDStreamSnapshot.bak"
   private val CheckPointTmpFile = "CSharpSinkDStreamSnapshot.tmp"
-  @transient private var checkpointDir = context.checkpointDir
+  @transient private var checkpointDir: String = context.sparkContext.checkpointDir.orNull(null)
 
   @transient private var sinkProcessorTrackingInfos:
       mutable.HashMap[Int, SinkProcessorTrackingInfo] = null
