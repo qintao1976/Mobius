@@ -50,7 +50,7 @@ class CSharpRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
     val cSharpWorker = new File(cSharpWorkerExecutable).getAbsoluteFile
-    unzip(cSharpWorker.getParentFile)
+    CSharpRDD.unzip(cSharpWorker.getParentFile)
 
     logInfo(s"compute CSharpRDD[${this.id}], stageId: ${context.stageId()}" +
       s", partitionId: ${context.partitionId()}, split_index: ${split.index}")
@@ -77,126 +77,13 @@ class CSharpRDD(
       broadcastVars, accumulator, bufferSize, reuse_worker)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }
-
-  /**
-   * Uncompress all zip files under directory cSharpWorkerWorkingDir.
-   * As .zip file is supported to be submitted by sparkclr-submit.cmd, and there might be
-   * some runtime dependencies of cSharpWorker.exe in the zip files,
-   * so before start to execute cSharpWorker.exe, uncompress all zip files first.
-   *
-   * One executor might process multiple splits, if zip files have already been unzipped
-   * in the previous split, there is no need to unzip them again.
-   * Once uncompression is done, a flag file "doneFlag" will be created.
-   * @param cSharpWorkerWorkingDir directory where cSharpWorker.exe is located
-   */
-  private def unzip(cSharpWorkerWorkingDir: File): Unit = {
-
-    val files = cSharpWorkerWorkingDir.list.filter(_.toLowerCase.endsWith(".zip"))
-
-    val lockName = "_unzip_lock"
-    val unzippingFlagName = "_unzipping"
-    val doneFlagName = "_unzip_done"
-
-    if (files.length == 0) {
-      logWarning("Found no zip files.")
-      return
-    } else {
-      logInfo("Found zip files: " + files.mkString(","))
-    }
-
-    val doneFlag = new File(cSharpWorkerWorkingDir, doneFlagName)
-
-    // check whether all zip files have already uncompressed
-    if (doneFlag.exists()) {
-      logInfo("Already unzipped all zip files, skip.")
-      return
-    }
-
-    val unzippingFlag = new File(cSharpWorkerWorkingDir, unzippingFlagName)
-
-    // if another thread is uncompressing files,
-    // current thread just needs to wait the operation done and return
-    if (unzippingFlag.exists()) {
-      waitUnzipOperationDone(doneFlag)
-      return
-    }
-
-    val lockFile = new File(cSharpWorkerWorkingDir, lockName)
-    var file: RandomAccessFile = null
-    var lock: FileLock = null
-    var channel: FileChannel = null
-
-    try {
-      file = new RandomAccessFile(lockFile, "rw")
-      channel = file.getChannel
-      lock = channel.tryLock()
-
-      if (lock == null) {
-        logWarning("Failed to obtain lock for file " + lockFile.getPath)
-        waitUnzipOperationDone(doneFlag)
-        return
-      }
-
-      // check again whether un-compression operation already done
-      if (new File(cSharpWorkerWorkingDir, doneFlagName).exists()) {
-        return
-      }
-
-      // unzippingFlag file will be deleted before release the lock
-      // so if obtain the lock successfully, there is no chance that the unzippingFlag still exists
-      unzippingFlag.createNewFile()
-
-      // unzip file
-      for (zipFile <- files) {
-        CSharpUtils.unzip(new File(cSharpWorkerWorkingDir, zipFile), cSharpWorkerWorkingDir)
-        logInfo("Unzip file: " + zipFile)
-      }
-
-      doneFlag.createNewFile()
-      unzippingFlag.delete()
-      logInfo("Unzip done.")
-
-    } catch {
-      case e: OverlappingFileLockException =>
-        logInfo("Already obtained the lock.")
-        waitUnzipOperationDone(doneFlag)
-      case e: Exception => e.printStackTrace()
-    }
-    finally {
-      if (lock != null && lock.isValid) lock.release()
-      if (channel != null && channel.isOpen) channel.close()
-      if (file != null) file.close()
-    }
-  }
-
-  /**
-   * Wait until doneFlag file is created, or total waiting time exceeds threshold
-   * @param doneFlag doneFlag file
-   */
-  private def waitUnzipOperationDone(doneFlag: File): Unit = {
-    val maxSleepTimeInSeconds = 30 // max wait time
-    var sleepTimeInSeconds = 0
-    val interval = 5
-
-    while (true) {
-
-      if (!doneFlag.exists()) {
-        if (sleepTimeInSeconds > maxSleepTimeInSeconds) {
-          return
-        }
-
-        sleepTimeInSeconds += interval
-        Thread.sleep(5 * 1000) // sleep 5 seconds
-      } else {
-        return
-      }
-    }
-  }
 }
 
-object CSharpRDD {
+object CSharpRDD extends Logging {
   var currentStageId: Int = 0
   var nextSeqNum: Int = 0
+
+  val unzipLock = new Object()
 
   // long running multi-process CSharpWorker mode is enabled only when configurated explicitly
   var maxCSharpWorkerProcessCount: Int = SparkEnv.get.conf.getInt("spark.mobius.CSharpWorker.maxProcessCount", -1)
@@ -243,6 +130,122 @@ object CSharpRDD {
       }
       nextSeqNum += 1
       workerFactoryId
+    }
+  }
+
+  /**
+   * Uncompress all zip files under directory cSharpWorkerWorkingDir.
+   * As .zip file is supported to be submitted by sparkclr-submit.cmd, and there might be
+   * some runtime dependencies of cSharpWorker.exe in the zip files,
+   * so before start to execute cSharpWorker.exe, uncompress all zip files first.
+   *
+   * One executor might process multiple splits, if zip files have already been unzipped
+   * in the previous split, there is no need to unzip them again.
+   * Once uncompression is done, a flag file "doneFlag" will be created.
+   * @param cSharpWorkerWorkingDir directory where cSharpWorker.exe is located
+   */
+  def unzip(cSharpWorkerWorkingDir: File): Unit = {
+    unzipLock.synchronized {
+      val files = cSharpWorkerWorkingDir.list.filter(_.toLowerCase.endsWith(".zip"))
+
+      val lockName = "_unzip_lock"
+      val unzippingFlagName = "_unzipping"
+      val doneFlagName = "_unzip_done"
+
+      if (files.length == 0) {
+        logWarning("Found no zip files.")
+        return
+      } else {
+        logInfo("Found zip files: " + files.mkString(","))
+      }
+
+      val doneFlag = new File(cSharpWorkerWorkingDir, doneFlagName)
+
+      // check whether all zip files have already uncompressed
+      if (doneFlag.exists()) {
+        logInfo("Already unzipped all zip files, skip.")
+        return
+      }
+
+      val unzippingFlag = new File(cSharpWorkerWorkingDir, unzippingFlagName)
+
+      // if another thread is uncompressing files,
+      // current thread just needs to wait the operation done and return
+      if (unzippingFlag.exists()) {
+        waitUnzipOperationDone(doneFlag)
+        return
+      }
+
+      val lockFile = new File(cSharpWorkerWorkingDir, lockName)
+      var file: RandomAccessFile = null
+      var lock: FileLock = null
+      var channel: FileChannel = null
+
+      try {
+        file = new RandomAccessFile(lockFile, "rw")
+        channel = file.getChannel
+        lock = channel.tryLock()
+
+        if (lock == null) {
+          logWarning("Failed to obtain lock for file " + lockFile.getPath)
+          waitUnzipOperationDone(doneFlag)
+          return
+        }
+
+        // check again whether un-compression operation already done
+        if (new File(cSharpWorkerWorkingDir, doneFlagName).exists()) {
+          return
+        }
+
+        // unzippingFlag file will be deleted before release the lock
+        // so if obtain the lock successfully, there is no chance that the unzippingFlag still exists
+        unzippingFlag.createNewFile()
+
+        // unzip file
+        for (zipFile <- files) {
+          CSharpUtils.unzip(new File(cSharpWorkerWorkingDir, zipFile), cSharpWorkerWorkingDir)
+          logInfo("Unzip file: " + zipFile)
+        }
+
+        doneFlag.createNewFile()
+        unzippingFlag.delete()
+        logInfo("Unzip done.")
+
+      } catch {
+        case e: OverlappingFileLockException =>
+          logInfo("Already obtained the lock.")
+          waitUnzipOperationDone(doneFlag)
+        case e: Exception => e.printStackTrace()
+      }
+      finally {
+        if (lock != null && lock.isValid) lock.release()
+        if (channel != null && channel.isOpen) channel.close()
+        if (file != null) file.close()
+      }
+    }
+  }
+
+  /**
+   * Wait until doneFlag file is created, or total waiting time exceeds threshold
+   * @param doneFlag doneFlag file
+   */
+  private def waitUnzipOperationDone(doneFlag: File): Unit = {
+    val maxSleepTimeInSeconds = 30 // max wait time
+    var sleepTimeInSeconds = 0
+    val interval = 5
+
+    while (true) {
+
+      if (!doneFlag.exists()) {
+        if (sleepTimeInSeconds > maxSleepTimeInSeconds) {
+          return
+        }
+
+        sleepTimeInSeconds += interval
+        Thread.sleep(5 * 1000) // sleep 5 seconds
+      } else {
+        return
+      }
     }
   }
 }

@@ -16,7 +16,7 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.hadoop.fs.Path
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.streaming.dstream.{DStreamCheckpointData, DStream}
-import org.apache.spark.{SparkException, Partition, Logging}
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.streaming.{Time, Duration, StreamingContext}
 import org.apache.spark.streaming.scheduler.Job
 import org.apache.spark.util.Utils
@@ -35,34 +35,25 @@ private [csharp] case class RddTrackingInfo[T: ClassTag] (
     rdd: RDD[T],
     rddBinary: Broadcast[Array[Byte]])
 
-private [csharp] case class RddAndPartition(
-    partition: Partition,
-    rddBinary: Broadcast[Array[Byte]])
+private [csharp] case class AddRdd(rdd: RDD[_])
 
-private[csharp] sealed trait SinkTrackerMessage
+/**
+ * Message type
+ * Here we use Tuple instead of defining new class because new class can't be recognized by RpcEnv
+ */
+private [csharp] object SinkTrackerMessageType {
+  // Tuple5(REGISTER_SINK, partitionIndex: Int, host: String, executorId: String, sinkEndpoint: RpcEndpointRef)
+  val REGISTER_SINK = 1
 
-private [csharp] case class AddRdd(rdd: RDD[_]) extends SinkTrackerMessage
+  // Tuple3(REGISTER_SINK_RESPONSE, partitionIndex: Int, previousAckedRddId: Int)
+  val REGISTER_SINK_RESPONSE = 2
 
-private[csharp] case class RegisterSink(
-    partitionIndex: Int,
-    host: String,
-    executorId: String,
-    sinkEndpoint: RpcEndpointRef
-  ) extends SinkTrackerMessage
+  // Tuple2(ADD_RDD_PARTITIONS, List(Tuple2(partition: Partition, rddBinary: Broadcast[Array[Byte]])))
+  val ADD_RDD_PARTITIONS = 3
 
-private[csharp] case class RegisterSinkResponse(
-    partitionIndex: Int,
-    previousAckedRddId: Int
-  ) extends SinkTrackerMessage
-
-private[csharp] case class AddRddPartitions(
-    rddAndPartitions: List[RddAndPartition]
-  ) extends SinkTrackerMessage
-
-private[csharp] case class AckRdd(
-    partitionIndex: Int,
-    rddId: Int
-  ) extends SinkTrackerMessage
+  // Tuple3(ACK_RDD, partitionIndex: Int, rddId: Int)
+  val ACK_RDD = 4
+}
 
 /**
   This is the outputDStream of stream graph. It will
@@ -341,7 +332,8 @@ private [csharp] class CSharpSinkDStream[T: ClassTag](
         extends ThreadSafeRpcEndpoint {
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-      case RegisterSink(partitionIndex, host, executorId, sinkEndpoint) =>
+      case Tuple5(SinkTrackerMessageType.REGISTER_SINK,
+        partitionIndex: Int, host: String, executorId: String, sinkEndpoint: RpcEndpointRef) =>
         logInfo(s"receive register msg, partitionIndex: $partitionIndex," +
           s" host: $host, executorId: $executorId")
         if (partitionIndex >= numPartitions) {
@@ -352,23 +344,24 @@ private [csharp] class CSharpSinkDStream[T: ClassTag](
           sinkTrackingInfo.host = host
           sinkTrackingInfo.executorId = executorId
           sinkTrackingInfo.endpoint = Some(sinkEndpoint)
-          context.reply(RegisterSinkResponse(partitionIndex, sinkTrackingInfo.ackedRddId))
-          val msg = AddRddPartitions(
+          context.reply(Tuple3(SinkTrackerMessageType.REGISTER_SINK_RESPONSE, partitionIndex, sinkTrackingInfo.ackedRddId))
+          val addRddPartitions = Tuple2(
+            SinkTrackerMessageType.ADD_RDD_PARTITIONS,
             (ackedRddTrackingInfos.toList ++ unackedRddTrackingInfos.toList).flatMap {
               case RddTrackingInfo(rdd, rddBinary) =>
                 if (partitionIndex < rdd.partitions.length) {
-                  Some(RddAndPartition(rdd.partitions(partitionIndex), rddBinary))
+                  Some(Tuple2(rdd.partitions(partitionIndex), rddBinary))
                 } else {
                   None
                 }
             }
           )
-          sinkEndpoint.send(msg)
+          sinkEndpoint.send(addRddPartitions)
         }
     }
 
     override def receive: PartialFunction[Any, Unit] = {
-      case AckRdd(partitionIndex, rddId) =>
+      case Tuple3(SinkTrackerMessageType.ACK_RDD, partitionIndex: Int, rddId: Int) =>
         logInfo(s"receive AckRdd msg, partitionIndex: $partitionIndex, rddId: $rddId")
         val sinkTrackingInfo = sinkProcessorTrackingInfos(partitionIndex)
         sinkTrackingInfo.ackedRddId = rddId
@@ -380,9 +373,10 @@ private [csharp] class CSharpSinkDStream[T: ClassTag](
         val rddTrackingInfo = trackRdd(rdd)
         for ((partitionIndex, sinkTrackingInfo) <- sinkProcessorTrackingInfos) {
           if (sinkTrackingInfo.endpoint.isDefined && partitionIndex < rdd.partitions.length) {
-            val msg = AddRddPartitions(
-              List(RddAndPartition(rdd.partitions(partitionIndex), rddTrackingInfo.rddBinary)))
-            sinkTrackingInfo.endpoint.get.send(msg)
+            val addRddPartitions = Tuple2(
+              SinkTrackerMessageType.ADD_RDD_PARTITIONS,
+              List(Tuple2(rdd.partitions(partitionIndex), rddTrackingInfo.rddBinary)))
+            sinkTrackingInfo.endpoint.get.send(addRddPartitions)
           }
         }
     }

@@ -11,6 +11,7 @@ import java.nio.ByteBuffer
 import java.util.{ArrayList => JArrayList, HashMap => JHashMap}
 import java.util.concurrent.LinkedBlockingDeque
 
+import org.apache.spark.api.csharp.CSharpRDD
 import org.apache.spark.api.python.{PythonRDD, PythonRunner, PythonBroadcast}
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.{TaskContext, Logging, SparkEnv, Partition}
@@ -65,33 +66,30 @@ private [csharp] class SinkProcessor(
     rddQueue = new LinkedBlockingDeque[(RDD[_], Partition)]()
   }
 
-  private def register(): RegisterSinkResponse = {
-    val host = SparkEnv.get.blockManager.blockManagerId.host
-    val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-    val registerMessage = RegisterSink(partitionIndex, host, executorId, endpoint)
-    trackerEndpoint.askWithRetry[RegisterSinkResponse](registerMessage)
-  }
-
   def start(): Unit = {
     initialize()
-    val registerSinkResponse = register()
-    logInfo(s"receive registerSinkResponse: $registerSinkResponse")
+
+    val host = SparkEnv.get.blockManager.blockManagerId.host
+    val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
+    val registerMessage = Tuple5(SinkTrackerMessageType.REGISTER_SINK, partitionIndex, host, executorId, endpoint)
+    val Tuple3(_, _, previousAckedRddId) =
+      trackerEndpoint.askWithRetry[Tuple3[Int, Int, Int]](registerMessage)
+    logInfo(s"receive registerSinkResponse, previousAckedRddId: $previousAckedRddId")
 
     val cSharpWorker = new File(cSharpWorkerExecutable).getAbsoluteFile
+    CSharpRDD.unzip(cSharpWorker.getParentFile)
     val bufferSize = SparkEnv.get.conf.getInt("spark.buffer.size", 65536)
     val reuse_worker = SparkEnv.get.conf.getBoolean("spark.python.worker.reuse", true)
     val taskContext = TaskContext.get()
 
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
-    serverSocket.setSoTimeout(20000)
+    serverSocket.setSoTimeout(60000)
     val serverPort = serverSocket.getLocalPort
     logInfo(s"serverPort: $serverPort")
     val cSharpProcessor = new CSharpProcessor(serverSocket, bufferSize, taskContext)
     cSharpProcessor.start()
 
-    val inputIterator = Iterator(
-      toBytes(registerSinkResponse.previousAckedRddId),
-      toBytes(serverPort))
+    val inputIterator = Iterator(toBytes(previousAckedRddId), toBytes(serverPort))
     envVars.put("SinkProcessor", partitionIndex.toString)
     val runner = new PythonRunner(
       command, envVars, cSharpIncludes, cSharpWorker.getAbsolutePath, unUsedVersionIdentifier,
@@ -145,7 +143,7 @@ private [csharp] class SinkProcessor(
             while (true) {
               val rddId = dataIn.readInt()
               logInfo(s"receive ack rdd $rddId from C# side")
-              trackerEndpoint.send(AckRdd(partitionIndex, rddId))
+              trackerEndpoint.send(Tuple3(SinkTrackerMessageType.ACK_RDD, partitionIndex, rddId))
             }
           } catch {
             case e: Exception if context.isCompleted || context.isInterrupted =>
@@ -198,10 +196,12 @@ private [csharp] class SinkProcessor(
     override val rpcEnv: RpcEnv = SparkEnv.get.rpcEnv
 
     override def receive: PartialFunction[Any, Unit] = {
-      case AddRddPartitions(rddAndPartitions) =>
+      case Tuple2(
+        SinkTrackerMessageType.ADD_RDD_PARTITIONS,
+        rddAndPartitions: List[Tuple2[Partition, Broadcast[Array[Byte]]]]) =>
         logInfo("Received AddRddAndPartitions signal from tracker")
         rddAndPartitions.foreach( {
-          case RddAndPartition(partition, rddBinary) =>
+          case Tuple2(partition, rddBinary) =>
             val rdd = serializer.deserialize[RDD[_]](ByteBuffer.wrap(rddBinary.value))
             logInfo(s"add rdd[${rdd.id}] to queue")
             rddQueue.add(rdd, partition)
