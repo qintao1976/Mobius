@@ -198,10 +198,11 @@ private [csharp] class SinkProcessor(
     override def receive: PartialFunction[Any, Unit] = {
       case Tuple2(
         SinkTrackerMessageType.ADD_RDD_PARTITIONS,
-        rddAndPartitions: List[Tuple2[Partition, Broadcast[Array[Byte]]]]) =>
+        rddAndPartitions: List[_]) =>
         logInfo("Received AddRddAndPartitions signal from tracker")
         rddAndPartitions.foreach( {
-          case Tuple2(partition, rddBinary) =>
+          case Tuple2(partition: Partition, broadcast: Broadcast[_]) =>
+            val rddBinary = broadcast.asInstanceOf[Broadcast[Array[Byte]]]
             val rdd = serializer.deserialize[RDD[_]](ByteBuffer.wrap(rddBinary.value))
             logInfo(s"add rdd[${rdd.id}] to queue")
             rddQueue.add(rdd, partition)

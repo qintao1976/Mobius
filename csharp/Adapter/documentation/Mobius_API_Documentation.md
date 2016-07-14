@@ -380,6 +380,142 @@
 ---
   
   
+###<font color="#68228B">Microsoft.Spark.CSharp.Network.ByteBuf</font>
+####Summary
+  
+            
+            ByteBuf delimits a section of a ByteBufChunk.
+            It is the smallest unit to be allocated.
+            
+        
+####Methods
+
+<table><tr><th>Name</th><th>Description</th></tr><tr><td><font color="blue">Clear</font></td><td>Sets the readerIndex and writerIndex of this buffer to 0.</td></tr><tr><td><font color="blue">IsReadable</font></td><td>Is this ByteSegment readable if and only if the buffer contains equal or more than the specified number of elements</td></tr><tr><td><font color="blue">IsWritable</font></td><td>Returns true if and only if the buffer has enough Capacity to accommodate size additional bytes.</td></tr><tr><td><font color="blue">ReadByte</font></td><td>Gets a byte at the current readerIndex and increases the readerIndex by 1 in this buffer.</td></tr><tr><td><font color="blue">ReadBytes</font></td><td>Reads a block of bytes from the ByteBuf and writes the data to a buffer.</td></tr><tr><td><font color="blue">Release</font></td><td>Release the ByteBuf back to the ByteBufPool</td></tr><tr><td><font color="blue">WriteBytes</font></td><td>Writes a block of bytes to the ByteBuf using data read from a buffer.</td></tr><tr><td><font color="blue">GetInputRioBuf</font></td><td>Returns a RioBuf object for input (receive)</td></tr><tr><td><font color="blue">GetOutputRioBuf</font></td><td>Returns a RioBuf object for output (send).</td></tr><tr><td><font color="blue">NewErrorStatusByteBuf</font></td><td>Creates an empty ByteBuf with error status.</td></tr><tr><td><font color="blue"></font></td><td>Finalizer.</td></tr><tr><td><font color="blue"></font></td><td>Allocates a ByteBuf from this ByteChunk.</td></tr><tr><td><font color="blue"></font></td><td>Release all resources</td></tr><tr><td><font color="blue"></font></td><td>Releases the ByteBuf back to this ByteChunk</td></tr><tr><td><font color="blue"></font></td><td>Returns a readable string for the ByteBufChunk</td></tr><tr><td><font color="blue"></font></td><td>Static method to create a new ByteBufChunk with given segment and chunk size. If isUnsafe is true, it allocates memory from the process's heap.</td></tr><tr><td><font color="blue"></font></td><td>Wraps HeapFree to process heap.</td></tr><tr><td><font color="blue"></font></td><td>Implementation of the Dispose pattern.</td></tr><tr><td><font color="blue"></font></td><td>Add the ByteBufChunk to this ByteBufChunkList linked-list based on ByteBufChunk's usage. So it will be moved to the right ByteBufChunkList that has the correct minUsage/maxUsage.</td></tr><tr><td><font color="blue"></font></td><td>Allocates a ByteBuf from this ByteBufChunkList if it is not empty.</td></tr><tr><td><font color="blue"></font></td><td>Releases the segment back to its ByteBufChunk.</td></tr><tr><td><font color="blue"></font></td><td>Adds the ByteBufChunk to this ByteBufChunkList</td></tr><tr><td><font color="blue"></font></td><td>Moves the ByteBufChunk down the ByteBufChunkList linked-list so it will end up in the right ByteBufChunkList that has the correct minUsage/maxUsage in respect to ByteBufChunk.Usage.</td></tr><tr><td><font color="blue"></font></td><td>Remove the ByteBufChunk from this ByteBufChunkList</td></tr><tr><td><font color="blue"></font></td><td>Returns a readable string for this ByteBufChunkList</td></tr><tr><td><font color="blue"></font></td><td>Allocates a ByteBuf from this ByteBufPool to use.</td></tr><tr><td><font color="blue"></font></td><td>Deallocates a ByteBuf back to this ByteBufPool.</td></tr><tr><td><font color="blue"></font></td><td>Gets a readable string for this ByteBufPool</td></tr><tr><td><font color="blue"></font></td><td>Returns the chunk numbers in each queue.</td></tr></table>
+
+---
+  
+  
+###<font color="#68228B">Microsoft.Spark.CSharp.Network.ByteBufChunk</font>
+####Summary
+  
+            
+            ByteBufChunk represents a memory blocks that can be allocated from 
+            .Net heap (managed code) or process heap(unsafe code)
+            
+        
+####Methods
+
+<table><tr><th>Name</th><th>Description</th></tr><tr><td><font color="blue">Finalize</font></td><td>Finalizer.</td></tr><tr><td><font color="blue">Allocate</font></td><td>Allocates a ByteBuf from this ByteChunk.</td></tr><tr><td><font color="blue">Dispose</font></td><td>Release all resources</td></tr><tr><td><font color="blue">Free</font></td><td>Releases the ByteBuf back to this ByteChunk</td></tr><tr><td><font color="blue">ToString</font></td><td>Returns a readable string for the ByteBufChunk</td></tr><tr><td><font color="blue">NewChunk</font></td><td>Static method to create a new ByteBufChunk with given segment and chunk size. If isUnsafe is true, it allocates memory from the process's heap.</td></tr><tr><td><font color="blue">FreeToProcessHeap</font></td><td>Wraps HeapFree to process heap.</td></tr><tr><td><font color="blue">Dispose</font></td><td>Implementation of the Dispose pattern.</td></tr><tr><td><font color="blue"></font></td><td>Add the ByteBufChunk to this ByteBufChunkList linked-list based on ByteBufChunk's usage. So it will be moved to the right ByteBufChunkList that has the correct minUsage/maxUsage.</td></tr><tr><td><font color="blue"></font></td><td>Allocates a ByteBuf from this ByteBufChunkList if it is not empty.</td></tr><tr><td><font color="blue"></font></td><td>Releases the segment back to its ByteBufChunk.</td></tr><tr><td><font color="blue"></font></td><td>Adds the ByteBufChunk to this ByteBufChunkList</td></tr><tr><td><font color="blue"></font></td><td>Moves the ByteBufChunk down the ByteBufChunkList linked-list so it will end up in the right ByteBufChunkList that has the correct minUsage/maxUsage in respect to ByteBufChunk.Usage.</td></tr><tr><td><font color="blue"></font></td><td>Remove the ByteBufChunk from this ByteBufChunkList</td></tr><tr><td><font color="blue"></font></td><td>Returns a readable string for this ByteBufChunkList</td></tr></table>
+
+---
+  
+  
+###<font color="#68228B">Microsoft.Spark.CSharp.Network.ByteBufChunk.Segment</font>
+####Summary
+  
+            
+            Segment struct delimits a section of a byte chunk.
+            
+        
+###<font color="#68228B">Microsoft.Spark.CSharp.Network.ByteBufChunkList</font>
+####Summary
+  
+            
+            ByteBufChunkList class represents a simple linked like list used to store ByteBufChunk objects
+            based on its usage.
+            
+        
+####Methods
+
+<table><tr><th>Name</th><th>Description</th></tr><tr><td><font color="blue">Add</font></td><td>Add the ByteBufChunk to this ByteBufChunkList linked-list based on ByteBufChunk's usage. So it will be moved to the right ByteBufChunkList that has the correct minUsage/maxUsage.</td></tr><tr><td><font color="blue">Allocate</font></td><td>Allocates a ByteBuf from this ByteBufChunkList if it is not empty.</td></tr><tr><td><font color="blue">Free</font></td><td>Releases the segment back to its ByteBufChunk.</td></tr><tr><td><font color="blue">AddInternal</font></td><td>Adds the ByteBufChunk to this ByteBufChunkList</td></tr><tr><td><font color="blue">MoveInternal</font></td><td>Moves the ByteBufChunk down the ByteBufChunkList linked-list so it will end up in the right ByteBufChunkList that has the correct minUsage/maxUsage in respect to ByteBufChunk.Usage.</td></tr><tr><td><font color="blue">Remove</font></td><td>Remove the ByteBufChunk from this ByteBufChunkList</td></tr><tr><td><font color="blue">ToString</font></td><td>Returns a readable string for this ByteBufChunkList</td></tr></table>
+
+---
+  
+  
+###<font color="#68228B">Microsoft.Spark.CSharp.Network.ByteBufPool</font>
+####Summary
+  
+            
+            ByteBufPool class is used to manage the ByteBuf pool that allocate and free pooled memory buffer.
+            We borrows some ideas from Netty buffer memory management.
+            
+        
+####Methods
+
+<table><tr><th>Name</th><th>Description</th></tr><tr><td><font color="blue">Allocate</font></td><td>Allocates a ByteBuf from this ByteBufPool to use.</td></tr><tr><td><font color="blue">Free</font></td><td>Deallocates a ByteBuf back to this ByteBufPool.</td></tr><tr><td><font color="blue">ToString</font></td><td>Gets a readable string for this ByteBufPool</td></tr><tr><td><font color="blue">GetUsages</font></td><td>Returns the chunk numbers in each queue.</td></tr></table>
+
+---
+  
+  
+###<font color="#68228B">Microsoft.Spark.CSharp.Network.RioNative</font>
+####Summary
+  
+            
+            RioNative class imports and initializes RIOSock.dll for use with RIO socket APIs.
+            It also provided a simple thread pool that retrieves the results from IO completion port.
+            
+        
+####Methods
+
+<table><tr><th>Name</th><th>Description</th></tr><tr><td><font color="blue">Finalize</font></td><td>Finalizer</td></tr><tr><td><font color="blue">Dispose</font></td><td>Release all resources.</td></tr><tr><td><font color="blue">SetUseThreadPool</font></td><td>Sets whether use thread pool to query RIO socket results, it must be called before calling EnsureRioLoaded()</td></tr><tr><td><font color="blue">EnsureRioLoaded</font></td><td>Ensures that the native dll of RIO socket is loaded and initialized.</td></tr><tr><td><font color="blue">UnloadRio</font></td><td>Explicitly unload the native dll of RIO socket, and release resources.</td></tr><tr><td><font color="blue">Init</font></td><td>Initializes RIOSock native library.</td></tr></table>
+
+---
+  
+  
+###<font color="#68228B">Microsoft.Spark.CSharp.Network.RioResult</font>
+####Summary
+  
+            
+            The RioResult structure contains data used to indicate request completion results used with RIO socket
+            
+        
+###<font color="#68228B">Microsoft.Spark.CSharp.Network.SocketStream</font>
+####Summary
+  
+            
+            Provides the underlying stream of data for network access.
+            Just like a NetworkStream.
+            
+        
+####Methods
+
+<table><tr><th>Name</th><th>Description</th></tr><tr><td><font color="blue">Flush</font></td><td>Flushes data from the stream. This is meaningless for us, so it does nothing.</td></tr><tr><td><font color="blue">Seek</font></td><td>Seeks a specific position in the stream. This method is not supported by the SocketDataStream class.</td></tr><tr><td><font color="blue">SetLength</font></td><td>Sets the length of the stream. This method is not supported by the SocketDataStream class.</td></tr><tr><td><font color="blue">ReadByte</font></td><td>Reads a byte from the stream and advances the position within the stream by one byte, or returns -1 if at the end of the stream.</td></tr><tr><td><font color="blue">Read</font></td><td>Reads data from the stream.</td></tr><tr><td><font color="blue">Write</font></td><td>Writes data to the stream.</td></tr></table>
+
+---
+  
+  
+###<font color="#68228B">Microsoft.Spark.CSharp.Network.SockDataToken</font>
+####Summary
+  
+            
+            SockDataToken class is used to associate with the SocketAsyncEventArgs object.
+            Primarily, it is a way to pass state to the event handler.
+            
+        
+####Methods
+
+<table><tr><th>Name</th><th>Description</th></tr><tr><td><font color="blue">Reset</font></td><td>Reset this token</td></tr><tr><td><font color="blue">DetachData</font></td><td>Detach the data ownership.</td></tr></table>
+
+---
+  
+  
+###<font color="#68228B">Microsoft.Spark.CSharp.Network.SocketFactory</font>
+####Summary
+  
+            
+            SocketFactory is used to create ISocketWrapper instance based on a configuration and OS version.
+            
+            The ISocket instance can be RioSocket object, if the configuration is set to RioSocket and
+            only the application is running on a Windows OS that supports Registered IO socket.
+            
+        
+####Methods
+
+<table><tr><th>Name</th><th>Description</th></tr><tr><td><font color="blue">CreateSocket</font></td><td>Creates a ISocket instance based on the configuration and OS version.</td></tr><tr><td><font color="blue">IsRioSockSupported</font></td><td>Indicates whether current OS supports RIO socket.</td></tr></table>
+
+---
+  
+  
 ###<font color="#68228B">Microsoft.Spark.CSharp.Sql.Column</font>
 ####Summary
   
@@ -849,7 +985,7 @@
         
 ####Methods
 
-<table><tr><th>Name</th><th>Description</th></tr><tr><td><font color="blue">CreateStream</font></td><td>Create an input stream that pulls messages from a Kafka Broker.</td></tr><tr><td><font color="blue">CreateStream</font></td><td>Create an input stream that pulls messages from a Kafka Broker.</td></tr><tr><td><font color="blue">CreateDirectStream</font></td><td>Create an input stream that directly pulls messages from a Kafka Broker and specific offset. This is not a receiver based Kafka input stream, it directly pulls the message from Kafka in each batch duration and processed without storing. This does not use Zookeeper to store offsets. The consumed offsets are tracked by the stream itself. For interoperability with Kafka monitoring tools that depend on Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application. You can access the offsets used in each batch from the generated RDDs (see [[org.apache.spark.streaming.kafka.HasOffsetRanges]]). To recover from driver failures, you have to enable checkpointing in the StreamingContext. The information on consumed offset can be recovered from the checkpoint. See the programming guide for details (constraints, etc.).</td></tr><tr><td><font color="blue">CreateDirectStreamWithRepartition</font></td><td>Create an input stream that directly pulls messages from a Kafka Broker and specific offset. This is not a receiver based Kafka input stream, it directly pulls the message from Kafka in each batch duration and processed without storing. This does not use Zookeeper to store offsets. The consumed offsets are tracked by the stream itself. For interoperability with Kafka monitoring tools that depend on Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application. You can access the offsets used in each batch from the generated RDDs (see [[org.apache.spark.streaming.kafka.HasOffsetRanges]]). To recover from driver failures, you have to enable checkpointing in the StreamingContext. The information on consumed offset can be recovered from the checkpoint. See the programming guide for details (constraints, etc.).</td></tr></table>
+<table><tr><th>Name</th><th>Description</th></tr><tr><td><font color="blue">CreateStream</font></td><td>Create an input stream that pulls messages from a Kafka Broker.</td></tr><tr><td><font color="blue">CreateStream</font></td><td>Create an input stream that pulls messages from a Kafka Broker.</td></tr><tr><td><font color="blue">CreateDirectStream</font></td><td>Create an input stream that directly pulls messages from a Kafka Broker and specific offset. This is not a receiver based Kafka input stream, it directly pulls the message from Kafka in each batch duration and processed without storing. This does not use Zookeeper to store offsets. The consumed offsets are tracked by the stream itself. For interoperability with Kafka monitoring tools that depend on Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application. You can access the offsets used in each batch from the generated RDDs (see [[org.apache.spark.streaming.kafka.HasOffsetRanges]]). To recover from driver failures, you have to enable checkpointing in the StreamingContext. The information on consumed offset can be recovered from the checkpoint. See the programming guide for details (constraints, etc.).</td></tr><tr><td><font color="blue">CreateDirectStreamWithRepartition</font></td><td>Create an input stream that directly pulls messages from a Kafka Broker and specific offset. This is not a receiver based Kafka input stream, it directly pulls the message from Kafka in each batch duration and processed without storing. This does not use Zookeeper to store offsets. The consumed offsets are tracked by the stream itself. For interoperability with Kafka monitoring tools that depend on Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application. You can access the offsets used in each batch from the generated RDDs (see [[org.apache.spark.streaming.kafka.HasOffsetRanges]]). To recover from driver failures, you have to enable checkpointing in the StreamingContext. The information on consumed offset can be recovered from the checkpoint. See the programming guide for details (constraints, etc.).</td></tr><tr><td><font color="blue">CreateDirectStreamWithRepartitionAndReadFunc``1</font></td><td>Create an input stream that directly pulls messages from a Kafka Broker and specific offset. This is not a receiver based Kafka input stream, it directly pulls the message from Kafka in each batch duration and processed without storing. This does not use Zookeeper to store offsets. The consumed offsets are tracked by the stream itself. For interoperability with Kafka monitoring tools that depend on Zookeeper, you have to update Kafka/Zookeeper yourself from the streaming application. You can access the offsets used in each batch from the generated RDDs (see [[org.apache.spark.streaming.kafka.HasOffsetRanges]]). To recover from driver failures, you have to enable checkpointing in the StreamingContext. The information on consumed offset can be recovered from the checkpoint. See the programming guide for details (constraints, etc.).</td></tr></table>
 
 ---
   

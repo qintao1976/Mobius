@@ -65,6 +65,7 @@ function Replace-VariableInFile($variable, $value, $sourceFile, $targetFile)
 
 function Download-File($url, $output)
 {
+    $output = [System.IO.Path]::GetFullPath($output)
     if (test-path $output)
     {
         Write-Output "[downloadtools.Download-File] $output exists. No need to download."
@@ -83,7 +84,13 @@ function Download-File($url, $output)
         -SourceIdentifier Web.DownloadProgressChanged -Action {
         $Global:Data = $event
     }
-    $wc.DownloadFileAsync($url, $output)
+    
+    $tmpOutput = $output + ".tmp.download"
+    if (test-path $tmpOutput) {
+        Remove-Item $tmpOutput
+    }
+    
+    $wc.DownloadFileAsync($url, $tmpOutput)
     While (!($Global:downloadComplete)) {
         $percent = $Global:Data.SourceArgs.ProgressPercentage
         $totalBytes = $Global:Data.SourceArgs.TotalBytesToReceive
@@ -92,6 +99,8 @@ function Download-File($url, $output)
             Write-Progress -Activity ("Downloading file to {0} from {1}" -f $output,$url) -Status ("{0} bytes \ {1} bytes" -f $receivedBytes,$totalBytes)  -PercentComplete $percent
         }
     }
+    
+    Rename-Item $tmpOutput -NewName $output
     Write-Progress -Activity ("Downloading file to {0} from {1}" -f $output, $url) -Status ("{0} bytes \ {1} bytes" -f $receivedBytes,$totalBytes)  -Completed
     Unregister-Event -SourceIdentifier Web.DownloadFileCompleted
     Unregister-Event -SourceIdentifier Web.DownloadProgressChanged
@@ -213,11 +222,11 @@ function Download-BuildTools
     }
     
     # Apache Maven
-	$mvnVer = "apache-maven-3.3.3"
+	$mvnVer = "apache-maven-3.3.9"
     $mvnCmd = "$toolsDir\$mvnVer\bin\mvn.cmd"
     if (!(test-path $mvnCmd))
     {
-        $url = "http://www.us.apache.org/dist/maven/maven-3/3.3.3/binaries/$mvnVer-bin.tar.gz"
+        $url = "http://www.us.apache.org/dist/maven/maven-3/3.3.9/binaries/$mvnVer-bin.tar.gz"
         $output="$toolsDir\$mvnVer-bin.tar.gz"
         Download-File $url $output
         Untar-File $output $toolsDir

@@ -49,7 +49,8 @@ namespace AdapterTest.Mocks
             return new MockDStreamProxy();
         }
 
-        public IDStreamProxy DirectKafkaStreamWithRepartition(List<string> topics, Dictionary<string, string> kafkaParams, Dictionary<string, long> fromOffsets, int numPartitions)
+        public IDStreamProxy DirectKafkaStreamWithRepartition(List<string> topics, Dictionary<string, string> kafkaParams, Dictionary<string, long> fromOffsets,
+            int numPartitions, byte[] readFunc, string serializationMode)
         {
             return new MockDStreamProxy();
         }
@@ -63,7 +64,7 @@ namespace AdapterTest.Mocks
         {
         }
 
-        public void AwaitTermination(int timeout)
+        public void AwaitTerminationOrTimeout(long timeout)
         {
         }
 
@@ -103,7 +104,7 @@ namespace AdapterTest.Mocks
         {
             Func<double, RDD<dynamic>, RDD<dynamic>, RDD<dynamic>> f = (Func<double, RDD<dynamic>, RDD<dynamic>, RDD<dynamic>>)formatter.Deserialize(new MemoryStream(func));
             RDD<dynamic> rdd = f(DateTime.UtcNow.Ticks,
-                new RDD<dynamic>((jdstream as MockDStreamProxy).rddProxy ?? new MockRddProxy(null), new SparkContext("", "")),
+                null,
                 new RDD<dynamic>((jdstream as MockDStreamProxy).rddProxy ?? new MockRddProxy(null), new SparkContext("", "")));
             return new MockDStreamProxy(rdd.RddProxy);
         }
