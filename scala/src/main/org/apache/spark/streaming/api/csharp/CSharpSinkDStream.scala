@@ -7,8 +7,10 @@ package org.apache.spark.streaming.api.csharp
 
 import java.util.{ArrayList => JArrayList, HashMap => JHashMap}
 
+import scala.concurrent.{ExecutionContextExecutorService, ExecutionContext}
 import scala.reflect.ClassTag
 import scala.collection.mutable
+import scala.util.{Failure, Success}
 
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper, SerializationFeature}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
@@ -19,7 +21,7 @@ import org.apache.spark.streaming.dstream.{DStreamCheckpointData, DStream}
 import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.streaming.{Time, Duration, StreamingContext}
 import org.apache.spark.streaming.scheduler.Job
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rpc._
@@ -36,6 +38,8 @@ private [csharp] case class RddTrackingInfo[T: ClassTag] (
     rddBinary: Broadcast[Array[Byte]])
 
 private [csharp] case class AddRdd(rdd: RDD[_])
+
+private [csharp] object StartSinkProcessor extends Serializable
 
 /**
  * Message type
@@ -92,6 +96,8 @@ private [csharp] class CSharpSinkDStream[T: ClassTag](
   @transient private var endpoint: RpcEndpointRef = null
   @transient private var jsonMapper: ObjectMapper = null
 
+  @transient private var submitJobThreadPool: ExecutionContextExecutorService = null
+
   protected[streaming] override val checkpointData = new CSharpSinkDStreamCheckpointData
 
   private def initialize(): Unit = {
@@ -111,6 +117,9 @@ private [csharp] class CSharpSinkDStream[T: ClassTag](
       .registerModule(DefaultScalaModule)
     endpoint = context.env.rpcEnv.setupEndpoint(
       "SinkProcessorTracker", new SinkProcessorTrackerEndpoint(context.env.rpcEnv))
+
+    submitJobThreadPool = ExecutionContext.fromExecutorService(
+      ThreadUtils.newDaemonCachedThreadPool("submit-job-thread-pool"))
   }
 
   private def deleteFile(file: String): Unit = {
@@ -266,7 +275,7 @@ private [csharp] class CSharpSinkDStream[T: ClassTag](
     logInfo(s"CSharpSinkDStream start ...")
     initialize()
     restoreSnapshot()
-    launchSinkProcessors()
+    endpoint.send(StartSinkProcessor)
   }
 
   start()
@@ -282,33 +291,6 @@ private [csharp] class CSharpSinkDStream[T: ClassTag](
     endpoint.send(AddRdd(rdd))
   }
 
-  private def launchSinkProcessors(): Unit = {
-    // use local variable to avoid "Task not serializable" exception
-    val command_ = command
-    val envVars_ = envVars
-    val cSharpIncludes_ = cSharpIncludes
-    val cSharpWorkerExecutable_ = cSharpWorkerExecutable
-    val unUsedVersionIdentifier_ = unUsedVersionIdentifier
-    val broadcastVars_ = broadcastVars
-    val startSinkProcessorFunc: Iterator[Long] => Unit =
-      (iterator: Iterator[Long]) => {
-        if (!iterator.hasNext) {
-          throw new SparkException(
-            "Could not start SinkProcessor as partitionIndex not found")
-        }
-        val partitionIndex = iterator.next()
-        assert(!iterator.hasNext)
-        val sinkProcessor = new SinkProcessor(partitionIndex.toInt, command_, envVars_,
-          cSharpIncludes_, cSharpWorkerExecutable_, unUsedVersionIdentifier_, broadcastVars_)
-        sinkProcessor.start()
-      }
-    val sinkProcessorRdd = context.sparkContext.range(0, numPartitions.toLong, 1, numPartitions)
-    sinkProcessorRdd.setName(s"SinkProcessor")
-    context.sparkContext.setJobDescription(s"Streaming job running SinkProcessor")
-    // TODO, how to handle falure and restart sink processor?
-    val future = context.sparkContext.submitJob[Long, Unit, Unit](
-        sinkProcessorRdd, startSinkProcessorFunc, 0 until numPartitions, (_, _) => Unit, ())
-  }
 
   override def dependencies: List[DStream[_]] = List(parent)
 
@@ -330,6 +312,40 @@ private [csharp] class CSharpSinkDStream[T: ClassTag](
   /** RpcEndpoint to receive messages from the SinkProcessors. */
   private class SinkProcessorTrackerEndpoint(override val rpcEnv: RpcEnv)
         extends ThreadSafeRpcEndpoint {
+
+    private def startSinkProcessors(): Unit = {
+      // use local variable to avoid "Task not serializable" exception
+      val command_ = command
+      val envVars_ = envVars
+      val cSharpIncludes_ = cSharpIncludes
+      val cSharpWorkerExecutable_ = cSharpWorkerExecutable
+      val unUsedVersionIdentifier_ = unUsedVersionIdentifier
+      val broadcastVars_ = broadcastVars
+      val startSinkProcessorFunc: Iterator[Long] => Unit =
+        (iterator: Iterator[Long]) => {
+          if (!iterator.hasNext) {
+            throw new SparkException(
+              "Could not start SinkProcessor as partitionIndex not found")
+          }
+          val partitionIndex = iterator.next()
+          assert(!iterator.hasNext)
+          val sinkProcessor = new SinkProcessor(partitionIndex.toInt, command_, envVars_,
+            cSharpIncludes_, cSharpWorkerExecutable_, unUsedVersionIdentifier_, broadcastVars_)
+          sinkProcessor.start()
+        }
+      val sinkProcessorRdd = context.sparkContext.range(0, numPartitions.toLong, 1, numPartitions)
+      sinkProcessorRdd.setName(s"SinkProcessor")
+      context.sparkContext.setJobDescription(s"Streaming job running SinkProcessor")
+      val future = context.sparkContext.submitJob[Long, Unit, Unit](
+        sinkProcessorRdd, startSinkProcessorFunc, 0 until numPartitions, (_, _) => Unit, ())
+      future.onComplete {
+        case Success(_) =>
+          logInfo(s"SinkProcessor job success")
+        case Failure(e) =>
+          logInfo(s"SinkProcessor job failure: $e")
+          self.send(StartSinkProcessor)
+      } (submitJobThreadPool)
+    }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
       case Tuple5(SinkTrackerMessageType.REGISTER_SINK,
@@ -361,6 +377,11 @@ private [csharp] class CSharpSinkDStream[T: ClassTag](
     }
 
     override def receive: PartialFunction[Any, Unit] = {
+
+      case StartSinkProcessor =>
+        logInfo(s"receive StartSinkProcessor msg")
+        startSinkProcessors()
+
       case Tuple3(SinkTrackerMessageType.ACK_RDD, partitionIndex: Int, rddId: Int) =>
         logInfo(s"receive AckRdd msg, partitionIndex: $partitionIndex, rddId: $rddId")
         val sinkTrackingInfo = sinkProcessorTrackingInfos(partitionIndex)
